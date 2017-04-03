@@ -109,32 +109,8 @@ public class HttpRequest implements Closeable, ProgressObservable {
                 throw new IllegalArgumentException("Connection already executed");
             }
 
-            conn = (HttpURLConnection) reformat(url).openConnection();
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Java) SKMCLauncher");
+            openConnection(url);
 
-            if (body != null) {
-                conn.setRequestProperty("Content-Type", contentType);
-                conn.setRequestProperty("Content-Length", Integer.toString(body.length));
-                conn.setDoInput(true);
-            }
-
-            for (Map.Entry<String, String> entry : headers.entrySet()) {
-                conn.setRequestProperty(entry.getKey(), entry.getValue());
-            }
-
-            conn.setRequestMethod(method);
-            conn.setUseCaches(false);
-            conn.setDoOutput(true);
-            conn.setReadTimeout(READ_TIMEOUT);
-
-            conn.connect();
-
-            if (body != null) {
-                DataOutputStream out = new DataOutputStream(conn.getOutputStream());
-                out.write(body);
-                out.flush();
-                out.close();
-            }
 
             inputStream = conn.getResponseCode() == HttpURLConnection.HTTP_OK ?
                     conn.getInputStream() : conn.getErrorStream();
@@ -147,6 +123,52 @@ public class HttpRequest implements Closeable, ProgressObservable {
         }
 
         return this;
+    }
+
+    /**
+     * Open a Connection to the given url. If result is redirect follow it until no more redirects are sent. Other statuses like 404 are ignored.
+     * @param url The URL to open
+     * @throws IOException
+     */
+    private void openConnection(URL url) throws IOException {
+        conn = (HttpURLConnection) reformat(url).openConnection();
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Java) SKMCLauncher");
+        if (body != null) {
+            conn.setRequestProperty("Content-Type", contentType);
+            conn.setRequestProperty("Content-Length", Integer.toString(body.length));
+            conn.setDoInput(true);
+        }
+
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            conn.setRequestProperty(entry.getKey(), entry.getValue());
+        }
+
+        conn.setRequestMethod(method);
+        conn.setUseCaches(false);
+        conn.setDoOutput(true);
+        conn.setReadTimeout(READ_TIMEOUT);
+
+        if (body != null) {
+            DataOutputStream out = new DataOutputStream(conn.getOutputStream());
+            out.write(body);
+            out.flush();
+            out.close();
+        }
+
+        conn.connect();
+
+
+        int responseCode = conn.getResponseCode();
+
+        switch (responseCode) {
+            case 301:
+            case 302:
+            case 303:
+            case 305:
+            case 307:
+                openConnection(new URL(conn.getHeaderField("Location")));
+
+        }
     }
 
     /**
